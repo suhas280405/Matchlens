@@ -1,1 +1,9 @@
 cskvgt.mp4
+.env
+.tmp-*
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+.vercel

@@ -2,6 +2,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Any
 
+import os
+from pathlib import Path
+
 from .config import DEFAULT_MATCH_ID
 from .engine.replay_feed import ReplayMatchFeed
 from .engine.similarity import MatchTwinEngine
@@ -15,114 +18,161 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for frontend Vite dev server
+# CORS configuration - allow the Vercel frontend origin
+# In production, this will be overridden by the Render deploy environment
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_ORIGIN] if FRONTEND_ORIGIN != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Singleton service instances
-feed = ReplayMatchFeed(match_id=DEFAULT_MATCH_ID)
-similarity_engine = MatchTwinEngine()
-db_service = DuckDBService()
-ai_service = GeminiService()
+# Singleton service instances with lazy fallback
+feed: Optional[ReplayMatchFeed] = None
+similarity_engine: Optional[MatchTwinEngine] = None
+db_service: Optional[DuckDBService] = None
+ai_service: Optional[GeminiService] = None
+
+
+def get_feed() -> ReplayMatchFeed:
+    global feed
+    if feed is None:
+        feed = ReplayMatchFeed(match_id=DEFAULT_MATCH_ID)
+    return feed
+
+
+def get_db() -> DuckDBService:
+    global db_service
+    if db_service is None:
+        db_service = DuckDBService()
+    return db_service
+
+
+def get_similarity() -> MatchTwinEngine:
+    global similarity_engine
+    if similarity_engine is None:
+        similarity_engine = MatchTwinEngine()
+    return similarity_engine
+
+
+def get_ai() -> GeminiService:
+    global ai_service
+    if ai_service is None:
+        ai_service = GeminiService()
+    return ai_service
+
+
+@app.on_event("startup")
+async def startup_event():
+    get_feed()
+    get_similarity()
+    get_db()
+    get_ai()
 
 
 @app.get("/api/health")
 def health_check():
+    f = get_feed()
     return {
         "status": "healthy",
-        "current_match_id": feed.match_id,
-        "is_playing": feed.is_playing,
-        "current_ball_index": feed.current_index,
-        "total_deliveries": len(feed.deliveries),
+        "current_match_id": f.match_id,
+        "is_playing": f.is_playing,
+        "current_ball_index": f.current_index,
+        "total_deliveries": len(f.deliveries),
     }
 
 
 @app.get("/api/matches")
 def list_available_matches(limit: int = 25):
-    return db_service.list_matches(limit=limit)
+    return get_db().list_matches(limit=limit)
 
 
 @app.post("/api/simulation/select-match")
 async def select_match(match_id: str = Query(...)):
     global feed
-    feed.pause()
+    f = get_feed()
+    f.pause()
     feed = ReplayMatchFeed(match_id=match_id)
     return {"status": "match_loaded", "match_id": match_id, "state": feed.get_current_state()}
 
 
 @app.post("/api/simulation/play")
 async def play_simulation():
-    feed.play()
-    return {"status": "playing", "speed": feed.speed_multiplier}
+    f = get_feed()
+    f.play()
+    return {"status": "playing", "speed": f.speed_multiplier}
 
 
 @app.post("/api/simulation/pause")
 async def pause_simulation():
-    feed.pause()
+    f = get_feed()
+    f.pause()
     return {"status": "paused"}
 
 
 @app.post("/api/simulation/step")
 async def step_simulation():
-    delivery = feed.step_next()
-    state = feed.get_current_state()
+    f = get_feed()
+    delivery = f.step_next()
+    state = f.get_current_state()
     if delivery:
         payload = {
             "type": "BALL_UPDATE",
             "delivery": delivery.model_dump(),
             "state": state.model_dump(),
         }
-        await feed.broadcast(payload)
+        await f.broadcast(payload)
     return {"delivery": delivery, "state": state}
 
 
 @app.post("/api/simulation/jump")
 async def jump_to_over(over: int = Query(...), innings: int = Query(2)):
-    feed.jump_to_over(target_over=over, target_innings=innings)
-    state = feed.get_current_state()
-    await feed.broadcast({"type": "STATE_RESET", "state": state.model_dump()})
+    f = get_feed()
+    f.jump_to_over(target_over=over, target_innings=innings)
+    state = f.get_current_state()
+    await f.broadcast({"type": "STATE_RESET", "state": state.model_dump()})
     return {"status": "jumped", "over": over, "innings": innings, "state": state}
 
 
 @app.post("/api/simulation/speed")
 def set_simulation_speed(multiplier: float = Query(...)):
-    feed.set_speed(multiplier)
-    return {"status": "speed_updated", "multiplier": feed.speed_multiplier}
+    f = get_feed()
+    f.set_speed(multiplier)
+    return {"status": "speed_updated", "multiplier": f.speed_multiplier}
 
 
 @app.post("/api/simulation/reset")
 async def reset_simulation():
-    feed.reset()
-    state = feed.get_current_state()
-    await feed.broadcast({"type": "STATE_RESET", "state": state.model_dump()})
+    f = get_feed()
+    f.reset()
+    state = f.get_current_state()
+    await f.broadcast({"type": "STATE_RESET", "state": state.model_dump()})
     return {"status": "reset", "state": state}
 
 
 @app.get("/api/matches/current/state")
 def get_current_match_state():
-    return feed.get_current_state()
+    return get_feed().get_current_state()
 
 
 @app.get("/api/matches/current/catchup")
 async def get_catchup_summary(mode: str = Query("normal")):
-    state = feed.get_current_state()
-    return await ai_service.generate_catchup_summary(state, mode=mode)
+    state = get_feed().get_current_state()
+    return await get_ai().generate_catchup_summary(state, mode=mode)
 
 
 @app.get("/api/matches/current/match-twin")
 def get_match_twin_analysis():
-    state = feed.get_current_state()
+    state = get_feed().get_current_state()
     balls_rem = state.balls_remaining
     wkts = state.wickets
     r_need = state.runs_needed if state.runs_needed is not None else 60
     rrr_val = state.rrr if state.rrr is not None else 10.0
 
-    return similarity_engine.find_similar_situations(
+    return get_similarity().find_similar_situations(
         balls_remaining=balls_rem,
         wickets_lost=wkts,
         runs_needed=r_need,
@@ -134,29 +184,30 @@ def get_match_twin_analysis():
 
 @app.get("/api/matches/current/head-to-head")
 def get_head_to_head_stats(batter: str = Query(...), bowler: str = Query(...)):
-    return db_service.get_head_to_head(batter=batter, bowler=bowler)
+    return get_db().get_head_to_head(batter=batter, bowler=bowler)
 
 
 @app.post("/api/matches/current/moment-explainer")
 async def explain_specific_moment(delivery: DeliveryEvent):
-    state = feed.get_current_state()
-    h2h = db_service.get_head_to_head(delivery.batter, delivery.bowler)
-    return await ai_service.explain_moment(delivery, state, h2h)
+    state = get_feed().get_current_state()
+    h2h = get_db().get_head_to_head(delivery.batter, delivery.bowler)
+    return await get_ai().explain_moment(delivery, state, h2h)
 
 
 @app.get("/api/matches/current/deliveries")
 def get_all_match_deliveries():
-    return feed.deliveries
+    return get_feed().deliveries
 
 
 @app.websocket("/ws/live")
 async def live_websocket_endpoint(websocket: WebSocket):
-    await feed.register_client(websocket)
+    f = get_feed()
+    await f.register_client(websocket)
     try:
         while True:
             # Keep connection open and receive optional client messages
             data = await websocket.receive_text()
     except WebSocketDisconnect:
-        feed.unregister_client(websocket)
+        f.unregister_client(websocket)
     except Exception:
-        feed.unregister_client(websocket)
+        f.unregister_client(websocket)

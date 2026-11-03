@@ -4,6 +4,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "ipl.duckdb"
+
+# Allow overriding DB path via environment variable for Render persistent disk
+DB_PATH = Path(os.getenv("DUCKDB_PATH", str(DB_PATH)))
+
 RAW_MATCHES_DIR = DATA_DIR / "raw" / "matches"
 
 # Gemini API configuration

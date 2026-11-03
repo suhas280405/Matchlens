@@ -1,0 +1,9 @@
+cskvgt.mp4
+backend/data/raw/ipl_json.zip
+backend/data/raw/matches/
+.tmp-*
+*.png
+.git
+.pytest_cache
+node_modules/
+frontend/node_modules/

@@ -1,5 +1,11 @@
-const API_BASE = "http://127.0.0.1:8000";
-const WS_BASE = "ws://127.0.0.1:8000/ws/live";
+// Frontend API service for MatchLens
+// URLs are configured via environment variables for both local development and production
+
+// Production URLs - set via Vercel environment variables
+// If not set, defaults to local development
+const isDev = typeof window !== "undefined" && window.location.hostname === "localhost" && window.location.port === "5173";
+const API_BASE = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) || (isDev ? "http://127.0.0.1:8000" : "");
+const WS_BASE = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_WS_BASE) || (typeof window !== "undefined" ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/live` : "ws://127.0.0.1:8000/ws/live");
 
 export async function fetchCurrentState() {
   const res = await fetch(`${API_BASE}/api/matches/current/state`);
