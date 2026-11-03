@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/**/*.py": {
+      "excludeFiles": "{frontend/**,docs/**,*.png,*.mp4,.tmp-*}"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
