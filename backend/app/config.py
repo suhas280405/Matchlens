@@ -9,6 +9,7 @@ DB_PATH = DATA_DIR / "ipl.duckdb"
 DB_PATH = Path(os.getenv("DUCKDB_PATH", str(DB_PATH)))
 
 RAW_MATCHES_DIR = DATA_DIR / "raw" / "matches"
+SAMPLE_MATCHES_DIR = DATA_DIR / "sample_matches"
 
 # Gemini API configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

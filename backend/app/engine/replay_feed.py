@@ -6,7 +6,7 @@ from fastapi import WebSocket
 
 from .models import DeliveryEvent, MatchState
 from .state_tracker import MatchStateTracker
-from ..config import RAW_MATCHES_DIR, DEFAULT_MATCH_ID
+from ..config import RAW_MATCHES_DIR, SAMPLE_MATCHES_DIR, DEFAULT_MATCH_ID
 
 
 class ReplayMatchFeed:
@@ -25,15 +25,43 @@ class ReplayMatchFeed:
         self._load_match(match_id)
 
     def _load_match(self, match_id: str):
-        json_path = RAW_MATCHES_DIR / f"{match_id}.json"
-        if not json_path.exists():
-            # Fallback to any available json file in matches directory
-            available = list(RAW_MATCHES_DIR.glob("*.json"))
+        candidate_paths = [
+            SAMPLE_MATCHES_DIR / f"{match_id}.json",
+            RAW_MATCHES_DIR / f"{match_id}.json",
+        ]
+        json_path = None
+        for p in candidate_paths:
+            if p.exists():
+                json_path = p
+                break
+
+        if not json_path:
+            # Fallback to any available json file in sample or raw directories
+            available = []
+            if SAMPLE_MATCHES_DIR.exists():
+                available.extend(list(SAMPLE_MATCHES_DIR.glob("*.json")))
+            if RAW_MATCHES_DIR.exists():
+                available.extend(list(RAW_MATCHES_DIR.glob("*.json")))
+
             if available:
                 json_path = available[0]
                 match_id = json_path.stem
             else:
-                raise FileNotFoundError(f"No match JSON found in {RAW_MATCHES_DIR}")
+                self.match_id = match_id
+                self.match_info = {
+                    "match_id": match_id,
+                    "season": "2023",
+                    "match_date": "2023-05-29",
+                    "venue": "Narendra Modi Stadium, Ahmedabad",
+                    "city": "Ahmedabad",
+                    "teams": ["Gujarat Titans", "Chennai Super Kings"],
+                    "toss_winner": "Chennai Super Kings",
+                    "toss_decision": "field",
+                    "outcome": {"winner": "Chennai Super Kings"},
+                }
+                self.deliveries = []
+                self.reset()
+                return
 
         self.match_id = match_id
         with open(json_path, "r", encoding="utf-8") as f:
