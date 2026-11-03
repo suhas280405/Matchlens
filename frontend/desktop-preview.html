@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #05080d;
+        overflow: hidden;
+      }
+      #frame {
+        display: block;
+        border: 0;
+        width: 1440px;
+        height: 900px;
+        transform-origin: 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="frame" src="/" title="MatchLens desktop preview"></iframe>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const scale = Number(params.get('scale') || 1);
+      const offset = Number(params.get('offset') || 0);
+      const frame = document.getElementById('frame');
+      frame.style.transform = `translateX(${-offset}px) scale(${scale})`;
+      document.body.style.width = `${1440 * scale}px`;
+      document.body.style.height = `${900 * scale}px`;
+    </script>
+  </body>
+</html>
