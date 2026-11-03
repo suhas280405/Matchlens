@@ -148,3 +148,20 @@ flowchart TD
   - Created clean quickstart launch script (`start.bat`).
   - Verified backend (port 8000) and frontend (port 5173) integration.
   - *Status*: **Completed & Ready for Evaluation**
+
+---
+
+### Step 9: Cloud Deployment & Monorepo Hosting (Vercel Serverless + React)
+- **Production URL**: `https://matchlens-suhas-projects-a168f1d2.vercel.app`
+- **Architecture**:
+  - **Frontend**: Vite React SPA hosted on Vercel Edge CDN (`outputDirectory: frontend/dist`).
+  - **Backend API**: Python FastAPI serverless ASGI function (`api/index.py`) powered by DuckDB (`backend/data/ipl.duckdb`) and dynamic replay state engine.
+  - **Configuration**: Unified monorepo build with root `package.json`, `vercel.json` rewrites (`/api/*` -> `api/index.py`), and `requirements.txt`.
+- **Live Endpoints Verified**:
+  - `GET /api/health`: Function and simulation health check.
+  - `GET /api/matches/current/state`: Live match state, recent overs, wagon & milestones.
+  - `GET /api/matches/current/catchup`: AI contextual narrative & match catch-up.
+  - `GET /api/matches/current/match-twin`: Historical similarity match twin query.
+  - `GET /api/matches/current/head-to-head`: Ball-by-ball batter vs bowler matchup.
+  - `POST /api/matches/current/moment-explainer`: Single-ball tactical breakdown.
+- *Status*: **Deployed & Verified Live**
